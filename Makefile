@@ -1,17 +1,19 @@
 CC = gcc
-CCFLAGS = -std=gnu99 -pedantic -Wall -Wextra -g #-Werror
-LDFLAGS = -fsanitize=address
+CFLAGS = -std=gnu99 -Wall -Wextra -Werror -pedantic
+LDFLAGS = -pthread
 NAME = proj2
-
+ZIPFILE = xhucov00.zip
 
 $(NAME): $(NAME).o
-	$(CC) $^ -o $@ $(LDFLAGS)
+	$(CC) $(LDFLAGS) $^ -o $@
 
 $(NAME).o: $(NAME).c
-	$(CC) $(CCFLAGS) $^ -c
-
-run: $(NAME)
-	./proj2 10 10 10 10
+	$(CC) $(CFLAGS) $^ -c
 
 clean:
 	rm $(NAME) *.o
+
+$(ZIPFILE): $(NAME).c Makefile
+	zip $@ $^
+
+.PHONY: clean $(ZIPFILE)
