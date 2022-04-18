@@ -392,10 +392,10 @@ int main(int argc, char **argv){
         if(oxygenPID < 0){
             handleErrors(ERR_FORK);
         }
-        if(oxygenPID > 0){
+        if(oxygenPID == 0){
             oxygen(idO, ar);
         }
-        if(oxygenPID == 0){
+        if(oxygenPID > 0){
             continue;
         }
     }
@@ -407,10 +407,10 @@ int main(int argc, char **argv){
         if(hydrogenPID < 0){
             handleErrors(ERR_FORK);
         }
-        if(hydrogenPID > 0){
+        if(hydrogenPID == 0){
             hydrogen(idH, ar);
         }
-        if(hydrogenPID == 0){
+        if(hydrogenPID > 0){
             continue;
         }
     }
