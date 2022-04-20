@@ -81,6 +81,7 @@ void handleErrors(int errCode){
     }
     if(errCode == ERR_SEM){
         fprintf(stderr, "Error: failed to initialize semaphores. Exiting..\n");
+        freeMemory();
     }
     if(errCode == ERR_MEMORY){
         fprintf(stderr, "Error: failed to allocate memory. Exiting..\n");
