@@ -52,6 +52,10 @@ struct sharedMemoryStruct{
 
     // this semaphore is here to ensure that the main process exits only after all child processes have exited
     sem_t* exitSem;
+
+    // this semaphore guards access to critical sections where variables are changed, typically incremented or decremented
+    // wherever it is needed
+    sem_t* varChangeGuard;
 };
 
 // global shared memory and output file
@@ -189,6 +193,7 @@ void oxygen(int idO, argsStruct *ar){
     //waiting for hydrogens to be ready
     sem_wait(shm->hydrogenReady);
     sem_wait(shm->hydrogenReady);
+
     // decrement remaining oxygen counter
     shm->remainingOxygen--;
 
@@ -265,13 +270,16 @@ void hydrogen(int idH, argsStruct *ar){
     // wait for oxygen to be ready
     sem_wait(shm->oxygenReady);
 
+    // remove this hydrogen from the "remaining" count, guarded by a semaphore, just in case
+    sem_wait(shm->varChangeGuard);
     shm->remainingHydrogen--;
+    sem_post(shm->varChangeGuard);
 
     // create molecule
     sem_wait(shm->writeSem);
     fprintf(f, "%d: H %d: creating molecule %d\n", shm->actionCount, idH, shm->moleculeCount);
     fflush(f);
-    (shm->actionCount)++;
+    shm->actionCount++;
     sem_post(shm->writeSem);
 
     // inform oxygen that hydrogen has started "creating"
@@ -313,6 +321,8 @@ void initializeSharedMemory(){
                                   -1, 0)) == NULL) handleErrors(ERR_MEMORY);
     if((shm->hydrogenCreating = mmap(NULL, sizeof(sem_t), PROT_WRITE | PROT_READ, MAP_SHARED | MAP_ANONYMOUS,
                                 -1, 0)) == NULL) handleErrors(ERR_MEMORY);
+    if((shm->varChangeGuard = mmap(NULL, sizeof(sem_t), PROT_WRITE | PROT_READ, MAP_SHARED | MAP_ANONYMOUS,
+                                     -1, 0)) == NULL) handleErrors(ERR_MEMORY);
     if((shm->exitSem = mmap(NULL, sizeof(sem_t), PROT_WRITE | PROT_READ, MAP_SHARED | MAP_ANONYMOUS,
                                      -1, 0)) == NULL) handleErrors(ERR_MEMORY);
 }
@@ -325,6 +335,7 @@ void initializeSemaphores(){
     if(sem_init(shm->oxygenReady, 1, 0)) handleErrors(ERR_SEM);
     if(sem_init(shm->hydrogenReady, 1, 0)) handleErrors(ERR_SEM);
     if(sem_init(shm->hydrogenCreating, 1, 0)) handleErrors(ERR_SEM);
+    if(sem_init(shm->varChangeGuard, 1, 1)) handleErrors(ERR_SEM);
     if(sem_init(shm->exitSem, 1, 0)) handleErrors(ERR_SEM);
 }
 
@@ -336,6 +347,7 @@ void destroySemaphores(){
     sem_destroy(shm->hydrogenReady);
     sem_destroy(shm->oxygenReady);
     sem_destroy(shm->hydrogenCreating);
+    sem_destroy(shm->varChangeGuard);
     sem_destroy(shm->exitSem);
 }
 
@@ -348,6 +360,7 @@ void freeMemory(){
     munmap(shm->hydrogenReady, sizeof(sem_t));
     munmap(shm->oxygenReady, sizeof(sem_t));
     munmap(shm->hydrogenCreating, sizeof(sem_t));
+    munmap(shm->varChangeGuard, sizeof(sem_t));
     munmap(shm->exitSem, sizeof(sem_t));
     munmap(shm, sizeof(struct sharedMemoryStruct));
     fclose(f);
@@ -387,8 +400,8 @@ int main(int argc, char **argv){
 
     // fork into oxygens
     for(int i = 0; i < ar->NO; i++){
-        oxygenPID = fork();
         idO++;
+        oxygenPID = fork();
         if(oxygenPID < 0){
             handleErrors(ERR_FORK);
         }
@@ -402,8 +415,8 @@ int main(int argc, char **argv){
 
     // fork into hydrogens
     for(int i = 0; i < ar->NH; i++){
-        hydrogenPID = fork();
         idH++;
+        hydrogenPID = fork();
         if(hydrogenPID < 0){
             handleErrors(ERR_FORK);
         }
