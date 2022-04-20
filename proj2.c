@@ -155,7 +155,7 @@ int parseArgs(int argc, char** argv, argsStruct* ar){
     return 1;
 }
 
-// function for oxygen processes
+// function for oxygen processes. idO is a unique identification number for each oxygen, ar is the arguments struct
 void oxygen(int idO, argsStruct *ar){
 
     // "O started" print
@@ -228,7 +228,7 @@ void oxygen(int idO, argsStruct *ar){
     exit(0);
 }
 
-// function for hydrogen processes
+// function for hydrogen processes. idH is a unique identification number for each hydrogen, ar is the arguments struct
 void hydrogen(int idH, argsStruct *ar){
 
     // "H started" print
@@ -394,34 +394,29 @@ int main(int argc, char **argv){
     int oxygenPID;
     int hydrogenPID;
 
-    // unique atom identifiers
-    int idH = 0;
-    int idO = 0;
 
-    // fork into oxygens
-    for(int i = 0; i < ar->NO; i++){
-        idO++;
+    // fork into oxygens; i is used as unique oxygen ID
+    for(int i = 1; i <= ar->NO; i++){
         oxygenPID = fork();
         if(oxygenPID < 0){
             handleErrors(ERR_FORK);
         }
         if(oxygenPID == 0){
-            oxygen(idO, ar);
+            oxygen(i, ar);
         }
         if(oxygenPID > 0){
             continue;
         }
     }
 
-    // fork into hydrogens
-    for(int i = 0; i < ar->NH; i++){
-        idH++;
+    // fork into hydrogens; i is  used as unique hydrogen ID
+    for(int i = 1; i <= ar->NH; i++){
         hydrogenPID = fork();
         if(hydrogenPID < 0){
             handleErrors(ERR_FORK);
         }
         if(hydrogenPID == 0){
-            hydrogen(idH, ar);
+            hydrogen(i, ar);
         }
         if(hydrogenPID > 0){
             continue;
