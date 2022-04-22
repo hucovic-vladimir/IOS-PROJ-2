@@ -12,6 +12,7 @@
 #include <time.h>
 #include <sys/mman.h>
 #include <string.h>
+#include <wait.h>
 
 #define ERR_MEMORY 1
 #define ERR_FORK 2
@@ -50,9 +51,6 @@ struct sharedMemoryStruct{
     // this semaphore guards access to the output file
     sem_t* writeSem;
 
-    // this semaphore is here to ensure that the main process exits only after all child processes have exited
-    sem_t* exitSem;
-
     // this semaphore guards access to critical sections where variables are changed, typically incremented or decremented
     // wherever it is needed
     sem_t* varChangeGuard;
@@ -89,7 +87,7 @@ void handleErrors(int errCode){
     exit(1);
 }
 
-// if arguments are in correct format, fill ar with argument values
+// if arguments are in correct format, fill ar with argument values and return 1, else return 0
 int parseArgs(int argc, char** argv, argsStruct* ar){
     if(argc > 5 || argc < 5){
         fprintf(stderr, "Error: Program needs exactly 4 arguments.\nUsage: ./proj2 <NO> <NH> <TI> <TB>\n");
@@ -108,7 +106,8 @@ int parseArgs(int argc, char** argv, argsStruct* ar){
     // arguments are stored in "ar" struct variables, or an error occurs and 0 is returned
     for (int i = 1; i < argc; ++i) {
         argument = strtol(argv[i], endPtr, 10);
-        if(strcmp(*endPtr, "")){
+        // if arg contains non-numeric chars OR arg is empty, return 0
+        if(strcmp(*endPtr, "") || !strcmp(argv[i], "")){
             fprintf(stderr, "Error: Program needs 4 integer arguments.\nUsage: ./proj2 <NO> <NH> <TI> <TB>\n");
             free(endPtr);
             return 0;
@@ -187,7 +186,6 @@ void oxygen(int idO, argsStruct *ar){
         shm->remainingHydrogen--;
         sem_post(shm->writeSem);
         sem_post(shm->oxygenBarrier);
-        sem_post(shm->exitSem);
         exit(0);
     }
 
@@ -225,7 +223,6 @@ void oxygen(int idO, argsStruct *ar){
     // free the spot for another oxygen
     sem_post(shm->oxygenBarrier);
 
-    sem_post(shm->exitSem);
     exit(0);
 }
 
@@ -261,7 +258,6 @@ void hydrogen(int idH, argsStruct *ar){
 
         shm->remainingHydrogen--;
         sem_post(shm->hydrogenBarrier);
-        sem_post(shm->exitSem);
         exit(0);
     }
 
@@ -300,7 +296,6 @@ void hydrogen(int idH, argsStruct *ar){
 
     // free the spot for another hydrogen
     sem_post(shm->hydrogenBarrier);
-    sem_post(shm->exitSem);
     exit(0);
 }
 
@@ -324,8 +319,6 @@ void initializeSharedMemory(){
                                 -1, 0)) == NULL) handleErrors(ERR_MEMORY);
     if((shm->varChangeGuard = mmap(NULL, sizeof(sem_t), PROT_WRITE | PROT_READ, MAP_SHARED | MAP_ANONYMOUS,
                                      -1, 0)) == NULL) handleErrors(ERR_MEMORY);
-    if((shm->exitSem = mmap(NULL, sizeof(sem_t), PROT_WRITE | PROT_READ, MAP_SHARED | MAP_ANONYMOUS,
-                                     -1, 0)) == NULL) handleErrors(ERR_MEMORY);
 }
 
 void initializeSemaphores(){
@@ -337,7 +330,6 @@ void initializeSemaphores(){
     if(sem_init(shm->hydrogenReady, 1, 0)) handleErrors(ERR_SEM);
     if(sem_init(shm->hydrogenCreating, 1, 0)) handleErrors(ERR_SEM);
     if(sem_init(shm->varChangeGuard, 1, 1)) handleErrors(ERR_SEM);
-    if(sem_init(shm->exitSem, 1, 0)) handleErrors(ERR_SEM);
 }
 
 void destroySemaphores(){
@@ -349,7 +341,6 @@ void destroySemaphores(){
     sem_destroy(shm->oxygenReady);
     sem_destroy(shm->hydrogenCreating);
     sem_destroy(shm->varChangeGuard);
-    sem_destroy(shm->exitSem);
 }
 
 // frees shared memory
@@ -362,7 +353,6 @@ void freeMemory(){
     munmap(shm->oxygenReady, sizeof(sem_t));
     munmap(shm->hydrogenCreating, sizeof(sem_t));
     munmap(shm->varChangeGuard, sizeof(sem_t));
-    munmap(shm->exitSem, sizeof(sem_t));
     munmap(shm, sizeof(struct sharedMemoryStruct));
     fclose(f);
 }
@@ -425,8 +415,8 @@ int main(int argc, char **argv){
     }
 
     // wait for all child processes to finish
-    for (int i = 0; i < ar->NO + ar->NH; ++i) {
-        sem_wait(shm->exitSem);
+    while(wait(NULL) > 0){
+        continue;
     }
 
     // clean up and exit
